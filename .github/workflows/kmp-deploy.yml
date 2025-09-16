@@ -2,15 +2,6 @@ name: KMP Deploy from Bitbucket
 
 on:
   workflow_dispatch:
-   inputs:
-      ios_lane:
-        description: "Fastlane lane for iOS (beta or release)"
-        required: true
-        default: "beta"
-      android_lane:
-        description: "Fastlane lane for Android (beta or release)"
-        required: true
-        default: "beta"
   push:
     branches: [main]
 
@@ -71,7 +62,7 @@ jobs:
       - name: Run Android Fastlane Beta Lane
         run: |
           cd SiteBuilderMobile/composeApp
-          fastlane android ${{ github.event.inputs.android_lane }}
+          fastlane android beta
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
@@ -113,7 +104,7 @@ jobs:
       - name: Run iOS Fastlane Beta Lane
         run: |
           cd SiteBuilderMobile/iosApp
-          fastlane ios ${{ github.event.inputs.ios_lane }}
+          fastlane ios beta
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
@@ -125,7 +116,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
           set -ex
-          IPA_PATH="$RUNNER_TEMP/iosApp.ipa"
+          IPA_PATH="SiteBuilderMobile/deploy/iosApp.ipa"
           APK_PATH="SiteBuilderMobile/composeApp/build/outputs/apk/debug/composeApp-debug.apk"
           S3_PATH="s3://${{ env.S3_BUCKET_NAME }}/$(date +%Y-%m-%d)/"
 
