@@ -1,0 +1,145 @@
+name: KMP Deploy from Bitbucket
+
+on:
+  workflow_dispatch:
+   inputs:
+      ios_lane:
+        description: "Fastlane lane for iOS (beta or release)"
+        required: true
+        default: "beta"
+      android_lane:
+        description: "Fastlane lane for Android (beta or release)"
+        required: true
+        default: "beta"
+  push:
+    branches: [main]
+
+env:
+  CI_PROVIDER: GITHUB
+  PROJECT_ROOT_DIR: "./SiteBuilderMobile"
+  S3_BUCKET_NAME: imal-apk-bucket
+  GRADLE_OPTS: "-Xmx4g -Dorg.gradle.jvmargs='-Xmx4g -XX:MaxMetaspaceSize=1g'"
+
+jobs:
+  deploy:
+    runs-on: macos-13
+    steps:
+      # 1. Set up SSH and clone Bitbucket repo
+      - name: Setup SSH for Bitbucket
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.BITBUCKET_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan bitbucket.org >> ~/.ssh/known_hosts
+
+      - name: Clone Bitbucket Repository
+        run: |
+          git clone git@bitbucket.org:azentio-software/site-builder-execution.git
+          mv site-builder-execution/SiteBuilderMobile SiteBuilderMobile
+
+      # 2. Set up Android + Fastlane environment
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Ruby for Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+
+      - name: Install Fastlane
+        run: gem install fastlane
+
+      - name: Ensure AWS CLI is Installed
+        run: |
+          if ! command -v aws &> /dev/null; then
+           brew install awscli
+          else
+           echo "AWS CLI already installed"
+          fi
+
+      # 3. Gradle clean
+      - name: Clean Project
+        run: ./SiteBuilderMobile/gradlew clean -p SiteBuilderMobile -b build.gradle.kts
+
+      # 4. Build Android via Fastlane
+      - name: Run Android Fastlane Beta Lane
+        run: |
+          cd SiteBuilderMobile/composeApp
+          fastlane android ${{ github.event.inputs.android_lane }}
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      # 5. Build iOSArm64 framework
+      - name: Build iOSArm64 Framework
+        run: |
+          cd SiteBuilderMobile
+          ./gradlew :composeApp:linkDebugFrameworkIosArm64 -x kspKotlinIosArm64 -b build.gradle.kts
+
+      # 6. Copy the framework
+      - name: Copy ComposeApp.framework
+        run: |
+          FRAMEWORK_SRC="SiteBuilderMobile/composeApp/build/bin/iosArm64/debugFramework/ComposeApp.framework"
+          FRAMEWORK_DEST="SiteBuilderMobile/iosApp/Frameworks"
+          if [ -d "$FRAMEWORK_SRC" ]; then
+            mkdir -p "$FRAMEWORK_DEST"
+            cp -R "$FRAMEWORK_SRC" "$FRAMEWORK_DEST"
+            echo "Copied ComposeApp.framework to $FRAMEWORK_DEST"
+          else
+            echo "ComposeApp.framework not found"
+            exit 1
+          fi
+
+      # 7. Install CocoaPods
+      - name: Install Pods
+        run: |
+          cd SiteBuilderMobile/iosApp
+          pod install
+
+      # 8. Install iOS Certificates (optional, if needed)
+      - name: Install iOS Certs & Profiles
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.IOS_CERTIFICATE_P12 }}
+          p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          mobileprovision-base64: ${{ secrets.IOS_MOBILEPROVISION }}
+
+      # 9. Run iOS Fastlane Lane
+      - name: Run iOS Fastlane Beta Lane
+        run: |
+          cd SiteBuilderMobile/iosApp
+          fastlane ios ${{ github.event.inputs.ios_lane }}
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      # 10. Upload to S3
+      - name: Upload APK & IPA to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          set -ex
+          IPA_PATH="$RUNNER_TEMP/iosApp.ipa"
+          APK_PATH="SiteBuilderMobile/composeApp/build/outputs/apk/debug/composeApp-debug.apk"
+          S3_PATH="s3://${{ env.S3_BUCKET_NAME }}/$(date +%Y-%m-%d)/"
+
+          echo "Uploading IPA to $S3_PATH"
+          if [ -f "$IPA_PATH" ]; then
+            aws s3 cp "$IPA_PATH" "$S3_PATH"
+          else
+            echo "IPA not found at $IPA_PATH"
+          fi
+
+          echo "Uploading APK to $S3_PATH"
+          if [ -f "$APK_PATH" ]; then
+            aws s3 cp "$APK_PATH" "$S3_PATH"
+          else
+            echo "APK not found at $APK_PATH"
+          fi
+
