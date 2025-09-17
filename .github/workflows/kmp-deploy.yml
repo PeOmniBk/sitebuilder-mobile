@@ -15,6 +15,16 @@ jobs:
   deploy:
     runs-on: macos-14
     steps:
+
+      # 0. Debug: Show available Xcode versions and switch to 16.x
+      - name: Show available Xcode versions
+        run: ls /Applications | grep Xcode
+
+      - name: Select Xcode 16.x
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.2.app
+          xcodebuild -version
+
       # 1. Set up SSH and clone Bitbucket repo
       - name: Setup SSH for Bitbucket
         run: |
