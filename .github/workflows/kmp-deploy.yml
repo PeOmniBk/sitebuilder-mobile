@@ -13,7 +13,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       # 1. Set up SSH and clone Bitbucket repo
       - name: Setup SSH for Bitbucket
