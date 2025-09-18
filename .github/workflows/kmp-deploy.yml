@@ -160,7 +160,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
           set -ex
-          IPA_PATH="SiteBuilderMobile/deploy/iosApp.ipa"
+          IPA_PATH="SiteBuilderMobile/iosApp/deploy/iosApp.ipa"
           APK_PATH="SiteBuilderMobile/composeApp/build/outputs/apk/debug/composeApp-debug.apk"
           S3_PATH="s3://${{ env.S3_BUCKET_NAME }}/$(date +%Y-%m-%d)/"
 
