@@ -2,6 +2,15 @@ name: KMP Deploy from Bitbucket
 
 on:
   workflow_dispatch:
+    inputs:
+      ios_lane:
+        description: "Fastlane lane for iOS (beta or release)"
+        required: true
+        default: "beta"
+      android_lane:
+        description: "Fastlane lane for Android (beta or release)"
+        required: true
+        default: "beta"
   push:
     branches: [main]
 
@@ -69,10 +78,10 @@ jobs:
         run: ./SiteBuilderMobile/gradlew clean -p SiteBuilderMobile -b build.gradle.kts
 
       # 4. Build Android via Fastlane
-      - name: Run Android Fastlane Beta Lane
+      - name: Run Android Fastlane Lane
         run: |
           cd SiteBuilderMobile/composeApp
-          fastlane android beta
+          fastlane android ${{ github.event.inputs.android_lane || 'beta' }}
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
@@ -142,10 +151,10 @@ jobs:
           done
 
       # 9. Run iOS Fastlane Lane
-      - name: Run iOS Fastlane Beta Lane
+      - name: Run iOS Fastlane Lane
         run: |
           cd SiteBuilderMobile/iosApp
-          fastlane ios beta
+          fastlane ios ${{ github.event.inputs.ios_lane || 'beta' }}
           echo "IPA files after Fastlane run:"
           find ./deploy -name "*.ipa" || echo "No IPA found"
           ls -la ./deploy || true
