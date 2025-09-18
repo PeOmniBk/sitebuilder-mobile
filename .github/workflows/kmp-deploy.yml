@@ -147,8 +147,8 @@ jobs:
           cd SiteBuilderMobile/iosApp
           fastlane ios beta
           echo "IPA files after Fastlane run:"
-          find ../deploy -name "*.ipa" || echo "No IPA found"
-          ls -la ../deploy || true
+          find ./deploy -name "*.ipa" || echo "No IPA found"
+          ls -la ./deploy || true
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
