@@ -146,6 +146,9 @@ jobs:
         run: |
           cd SiteBuilderMobile/iosApp
           fastlane ios beta
+          echo "IPA files after Fastlane run:"
+          find ../deploy -name "*.ipa" || echo "No IPA found"
+          ls -la ../deploy || true
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
@@ -166,6 +169,8 @@ jobs:
             aws s3 cp "$IPA_PATH" "$S3_PATH"
           else
             echo "IPA not found at $IPA_PATH"
+            echo "Searching for IPA under SiteBuilderMobile:"
+            find SiteBuilderMobile -name "*.ipa"
           fi
 
           echo "Uploading APK to $S3_PATH"
