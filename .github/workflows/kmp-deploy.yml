@@ -111,44 +111,38 @@ jobs:
           cd SiteBuilderMobile/iosApp
           pod install
 
-      # 8. Install Apple certificate and provisioning profile (manual)
-      - name: Install certs & provisioning profile
+      # 8. Install Apple certificate and provisioning profiles
+      - name: Install certs & provisioning profiles
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_P12 }}
           P12_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_MOBILEPROVISION }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          IOS_DEV_MOBILEPROVISION: ${{ secrets.IOS_MOBILEPROVISION }}
+          IOS_APPSTORE_MOBILEPROVISION: ${{ secrets.IOS_MOBILEPROVISION_APPSTORE }}
         run: |
           echo "--- Decoding secrets ---"
           CERT_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          PP_DEV_PATH=$RUNNER_TEMP/dev.mobileprovision
+          PP_APPSTORE_PATH=$RUNNER_TEMP/appstore.mobileprovision
 
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERT_PATH
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+          echo -n "$IOS_DEV_MOBILEPROVISION" | base64 --decode -o $PP_DEV_PATH
+          echo -n "$IOS_APPSTORE_MOBILEPROVISION" | base64 --decode -o $PP_APPSTORE_PATH
+
           echo "Cert size: $(wc -c < $CERT_PATH)"
-          echo "Profile size: $(wc -c < $PP_PATH)"
+          echo "Dev Profile size: $(wc -c < $PP_DEV_PATH)"
+          echo "App Store Profile size: $(wc -c < $PP_APPSTORE_PATH)"
 
-          echo "--- Creating temp keychain ---"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          echo "--- Importing certificate to default keychain ---"
+          security import $CERT_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12
 
-          echo "--- Importing certificate ---"
-          security import $CERT_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
-          echo "--- Installing provisioning profile ---"
+          echo "--- Installing provisioning profiles ---"
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_DEV_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_APPSTORE_PATH ~/Library/MobileDevice/Provisioning\ Profiles
 
           echo "--- Installed provisioning profiles ---"
           ls -la ~/Library/MobileDevice/Provisioning\ Profiles
-          for f in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision; do
-            echo "----- $f -----"
-            security cms -D -i "$f" | grep -A2 -E "<key>Name</key>|<key>UUID</key>"
-          done
+
 
       # 9. Run iOS Fastlane Lane
       - name: Run iOS Fastlane Lane
@@ -170,7 +164,14 @@ jobs:
         run: |
           set -ex
           IPA_PATH="SiteBuilderMobile/iosApp/deploy/iosApp.ipa"
-          APK_PATH="SiteBuilderMobile/composeApp/build/outputs/apk/debug/composeApp-debug.apk"
+          
+          # Pick APK path depending on Android lane
+          if [ "${{ github.event.inputs.android_lane }}" = "release" ]; then
+            APK_PATH="SiteBuilderMobile/composeApp/build/outputs/apk/release/composeApp-release.apk"
+          else
+            APK_PATH="SiteBuilderMobile/composeApp/build/outputs/apk/debug/composeApp-debug.apk"
+          fi
+
           S3_PATH="s3://${{ env.S3_BUCKET_NAME }}/$(date +%Y-%m-%d)/"
 
           echo "Uploading IPA to $S3_PATH"
@@ -187,5 +188,8 @@ jobs:
             aws s3 cp "$APK_PATH" "$S3_PATH"
           else
             echo "APK not found at $APK_PATH"
+            echo "Searching for APK under SiteBuilderMobile:"
+            find SiteBuilderMobile -name "*.apk"
           fi
+
 
