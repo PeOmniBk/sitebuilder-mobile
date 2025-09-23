@@ -118,22 +118,27 @@ jobs:
           P12_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           IOS_DEV_MOBILEPROVISION: ${{ secrets.IOS_MOBILEPROVISION }}
           IOS_APPSTORE_MOBILEPROVISION: ${{ secrets.IOS_MOBILEPROVISION_APPSTORE }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           echo "--- Decoding secrets ---"
           CERT_PATH=$RUNNER_TEMP/build_certificate.p12
           PP_DEV_PATH=$RUNNER_TEMP/dev.mobileprovision
           PP_APPSTORE_PATH=$RUNNER_TEMP/appstore.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERT_PATH
           echo -n "$IOS_DEV_MOBILEPROVISION" | base64 --decode -o $PP_DEV_PATH
           echo -n "$IOS_APPSTORE_MOBILEPROVISION" | base64 --decode -o $PP_APPSTORE_PATH
 
-          echo "Cert size: $(wc -c < $CERT_PATH)"
-          echo "Dev Profile size: $(wc -c < $PP_DEV_PATH)"
-          echo "App Store Profile size: $(wc -c < $PP_APPSTORE_PATH)"
+          echo "--- Creating temp keychain ---"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          echo "--- Importing certificate to default keychain ---"
-          security import $CERT_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12
+          echo "--- Importing certificate ---"
+          security import $CERT_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
 
           echo "--- Installing provisioning profiles ---"
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
