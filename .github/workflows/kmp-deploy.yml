@@ -23,6 +23,7 @@ env:
 jobs:
   deploy:
     runs-on: macos-14
+    timeout-minutes: 60
     steps:
 
       # 0. Debug: Show available Xcode versions and switch to 16.x
@@ -33,6 +34,20 @@ jobs:
         run: |
           sudo xcode-select -s /Applications/Xcode_16.2.app
           xcodebuild -version
+
+      # 0.1. Print build context for traceability
+      - name: Print Build Context
+        run: |
+          echo "=============================="
+          echo "Starting KMP Deploy Workflow"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Android Lane: ${{ github.event.inputs.android_lane || 'beta' }}"
+          echo "iOS Lane: ${{ github.event.inputs.ios_lane || 'beta' }}"
+          echo "Project Root: $PROJECT_ROOT_DIR"
+          echo "S3 Bucket: $S3_BUCKET_NAME"
+          echo "=============================="
 
       # 1. Set up SSH and clone Bitbucket repo
       - name: Setup SSH for Bitbucket
@@ -76,6 +91,17 @@ jobs:
       # 3. Gradle clean
       - name: Clean Project
         run: ./SiteBuilderMobile/gradlew clean -p SiteBuilderMobile -b build.gradle.kts
+
+      # 3.1. Echo Android build info
+      - name: Log Android Build Context
+        run: |
+          echo "=============================="
+          echo "Android Build Information"
+          echo "Fastlane Lane: ${{ github.event.inputs.android_lane || 'beta' }}"
+          echo "Gradle JVM Args: $GRADLE_OPTS"
+          echo "Firebase Token Provided: ${{ secrets.FIREBASE_TOKEN != '' }}"
+          echo "Project Path: SiteBuilderMobile/composeApp"
+          echo "=============================="
 
       # 4. Build Android via Fastlane
       - name: Run Android Fastlane Lane
@@ -148,6 +174,18 @@ jobs:
           echo "--- Installed provisioning profiles ---"
           ls -la ~/Library/MobileDevice/Provisioning\ Profiles
 
+      # 8.1. Echo iOS build info
+      - name: Log iOS Build Context
+        run: |
+          echo "=============================="
+          echo "iOS Build Information"
+          echo "Fastlane Lane: ${{ github.event.inputs.ios_lane || 'beta' }}"
+          echo "Provisioning Profiles Installed:"
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles || echo "No profiles found!"
+          echo "Keychains:"
+          security list-keychains
+          echo "=============================="
+
 
       # 9. Run iOS Fastlane Lane
       - name: Run iOS Fastlane Lane
@@ -159,6 +197,17 @@ jobs:
           ls -la ./deploy || true
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      # 10.1. Echo artifact summary before upload
+      - name: Log Artifact Summary
+        run: |
+          echo "=============================="
+          echo "Artifact Summary"
+          echo "Expected Android Lane: ${{ github.event.inputs.android_lane || 'beta' }}"
+          echo "Expected iOS Lane: ${{ github.event.inputs.ios_lane || 'beta' }}"
+          echo "Searching for build outputs..."
+          find SiteBuilderMobile -type f \( -name "*.apk" -o -name "*.aab" -o -name "*.ipa" \)
+          echo "=============================="
 
       # 10. Upload to S3
       - name: Upload APK & IPA to S3
