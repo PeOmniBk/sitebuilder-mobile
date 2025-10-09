@@ -103,7 +103,11 @@ jobs:
           echo "Project Path: SiteBuilderMobile/composeApp"
           echo "=============================="
 
-      # 4. Build Android via Fastlane
+      # 4. Provide Play Store service account key
+      - name: Set up Google Play credentials
+        run: echo "${{ secrets.GOOGLE_PLAY_JSON_KEY }}" | base64 --decode > playstore_key.json
+
+      # 5. Build Android via Fastlane
       - name: Run Android Fastlane Lane
         run: |
           cd SiteBuilderMobile/composeApp
@@ -111,13 +115,13 @@ jobs:
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
-      # 5. Build iOSArm64 framework
+      # 6. Build iOSArm64 framework
       - name: Build iOSArm64 Framework
         run: |
           cd SiteBuilderMobile
           ./gradlew :composeApp:linkDebugFrameworkIosArm64 -x kspKotlinIosArm64 -b build.gradle.kts
 
-      # 6. Copy the framework
+      # 7. Copy the framework
       - name: Copy ComposeApp.framework
         run: |
           FRAMEWORK_SRC="SiteBuilderMobile/composeApp/build/bin/iosArm64/debugFramework/ComposeApp.framework"
@@ -131,13 +135,13 @@ jobs:
             exit 1
           fi
 
-      # 7. Install CocoaPods
+      # 8. Install CocoaPods
       - name: Install Pods
         run: |
           cd SiteBuilderMobile/iosApp
           pod install
 
-      # 8. Install Apple certificate and provisioning profiles
+      # 9. Install Apple certificate and provisioning profiles
       - name: Install certs & provisioning profiles
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_P12 }}
@@ -174,7 +178,7 @@ jobs:
           echo "--- Installed provisioning profiles ---"
           ls -la ~/Library/MobileDevice/Provisioning\ Profiles
 
-      # 8.1. Echo iOS build info
+      # 9.1. Echo iOS build info
       - name: Log iOS Build Context
         run: |
           echo "=============================="
@@ -187,7 +191,7 @@ jobs:
           echo "=============================="
 
 
-      # 9. Run iOS Fastlane Lane
+      # 10. Run iOS Fastlane Lane
       - name: Run iOS Fastlane Lane
         run: |
           cd SiteBuilderMobile/iosApp
@@ -198,7 +202,7 @@ jobs:
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
-      # 10.1. Echo artifact summary before upload
+      # 11.0. Echo artifact summary before upload
       - name: Log Artifact Summary
         run: |
           echo "=============================="
@@ -209,8 +213,8 @@ jobs:
           find SiteBuilderMobile -type f \( -name "*.apk" -o -name "*.aab" -o -name "*.ipa" \)
           echo "=============================="
 
-      # 10. Upload to S3
-      - name: Upload APK & IPA to S3
+      # 11.1. Upload to S3
+      - name: Upload APK/AAB & IPA to S3
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -218,32 +222,39 @@ jobs:
         run: |
           set -ex
           IPA_PATH="SiteBuilderMobile/iosApp/deploy/iosApp.ipa"
-          
-          # Pick APK path depending on Android lane
+
+          # Pick correct Android artifact path
           if [ "${{ github.event.inputs.android_lane }}" = "release" ]; then
-            APK_PATH="SiteBuilderMobile/composeApp/build/outputs/apk/release/composeApp-release.apk"
+            ANDROID_PATH="SiteBuilderMobile/composeApp/build/outputs/bundle/release/composeApp-release.aab"
           else
-            APK_PATH="SiteBuilderMobile/composeApp/build/outputs/apk/debug/composeApp-debug.apk"
+            ANDROID_PATH="SiteBuilderMobile/composeApp/build/outputs/apk/debug/composeApp-debug.apk"
           fi
 
           S3_PATH="s3://${{ env.S3_BUCKET_NAME }}/$(date +%Y-%m-%d)/"
 
-          echo "Uploading IPA to $S3_PATH"
+          echo "=============================="
+          echo "Uploading artifacts to: $S3_PATH"
+          echo "=============================="
+
+          echo "Uploading iOS IPA..."
           if [ -f "$IPA_PATH" ]; then
             aws s3 cp "$IPA_PATH" "$S3_PATH"
+            echo "Uploaded IPA successfully"
           else
             echo "IPA not found at $IPA_PATH"
-            echo "Searching for IPA under SiteBuilderMobile:"
-            find SiteBuilderMobile -name "*.ipa"
           fi
 
-          echo "Uploading APK to $S3_PATH"
-          if [ -f "$APK_PATH" ]; then
-            aws s3 cp "$APK_PATH" "$S3_PATH"
+          echo "Uploading Android artifact..."
+          if [ -f "$ANDROID_PATH" ]; then
+            aws s3 cp "$ANDROID_PATH" "$S3_PATH"
+            echo "Uploaded Android artifact successfully"
           else
-            echo "APK not found at $APK_PATH"
-            echo "Searching for APK under SiteBuilderMobile:"
-            find SiteBuilderMobile -name "*.apk"
+            echo "Android artifact not found at $ANDROID_PATH"
           fi
+
+          echo "=============================="
+          echo "Upload step completed"
+          echo "=============================="
+
 
 
