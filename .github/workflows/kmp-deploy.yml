@@ -105,7 +105,9 @@ jobs:
 
       # 4. Provide Play Store service account key
       - name: Set up Google Play credentials
-        run: echo "${{ secrets.GOOGLE_PLAY_JSON_KEY }}" | base64 --decode > playstore_key.json
+        run: |
+          cd SiteBuilderMobile/composeApp
+          echo "${{ secrets.GOOGLE_PLAY_JSON_KEY }}" | base64 --decode > playstore_key.json
 
       # 5. Build Android via Fastlane
       - name: Run Android Fastlane Lane
