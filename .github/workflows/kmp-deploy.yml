@@ -62,7 +62,14 @@ jobs:
           git clone git@bitbucket.org:azentio-software/site-builder-execution.git
           mv site-builder-execution/SiteBuilderMobile SiteBuilderMobile
 
-      # 2. Set up Android + Fastlane environment
+      # 2. Decode Android keystore for signing
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > testdeploy.keystore
+          echo "Keystore decoded at root (testdeploy.keystore)"
+
+
+      # 2.1. Set up Android + Fastlane environment
       - name: Set up JDK
         uses: actions/setup-java@v3
         with:
@@ -116,6 +123,9 @@ jobs:
           fastlane android ${{ github.event.inputs.android_lane || 'beta' }}
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
       # 6. Build iOSArm64 framework
       - name: Build iOSArm64 Framework
