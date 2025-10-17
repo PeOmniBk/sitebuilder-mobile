@@ -131,19 +131,22 @@ jobs:
       - name: Build iOSArm64 Framework
         run: |
           cd SiteBuilderMobile
-          ./gradlew :composeApp:linkDebugFrameworkIosArm64 -x kspKotlinIosArm64 -b build.gradle.kts
+          ./gradlew :composeApp:linkReleaseFrameworkIosArm64 -x kspKotlinIosArm64 -b build.gradle.kts
 
       # 7. Copy the framework
       - name: Copy ComposeApp.framework
         run: |
-          FRAMEWORK_SRC="SiteBuilderMobile/composeApp/build/bin/iosArm64/debugFramework/ComposeApp.framework"
+          FRAMEWORK_SRC="SiteBuilderMobile/composeApp/build/bin/iosArm64/releaseFramework/ComposeApp.framework"
           FRAMEWORK_DEST="SiteBuilderMobile/iosApp/Frameworks"
+
+          echo "Looking for framework at: $FRAMEWORK_SRC"
           if [ -d "$FRAMEWORK_SRC" ]; then
             mkdir -p "$FRAMEWORK_DEST"
             cp -R "$FRAMEWORK_SRC" "$FRAMEWORK_DEST"
             echo "Copied ComposeApp.framework to $FRAMEWORK_DEST"
+            ls -la "$FRAMEWORK_DEST"
           else
-            echo "ComposeApp.framework not found"
+            echo "ComposeApp.framework not found at $FRAMEWORK_SRC"
             exit 1
           fi
 
