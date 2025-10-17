@@ -167,6 +167,7 @@ jobs:
           echo "--- Decoding secrets ---"
           CERT_PATH=$RUNNER_TEMP/build_certificate.p12
           PP_DEV_PATH=$RUNNER_TEMP/dev.mobileprovision
+          PP_ADHOC_PATH=$RUNNER_TEMP/adhoc.mobileprovision
           PP_APPSTORE_PATH=$RUNNER_TEMP/appstore.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
