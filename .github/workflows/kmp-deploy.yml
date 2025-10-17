@@ -137,13 +137,14 @@ jobs:
       - name: Copy ComposeApp.framework
         run: |
           FRAMEWORK_SRC="SiteBuilderMobile/composeApp/build/bin/iosArm64/debugFramework/ComposeApp.framework"
-          FRAMEWORK_DEST="SiteBuilderMobile/iosApp/Frameworks"
+          FRAMEWORK_DEST="SiteBuilderMobile/iosApp"
+          echo "Looking for framework at: $FRAMEWORK_SRC"
           if [ -d "$FRAMEWORK_SRC" ]; then
-            mkdir -p "$FRAMEWORK_DEST"
             cp -R "$FRAMEWORK_SRC" "$FRAMEWORK_DEST"
             echo "Copied ComposeApp.framework to $FRAMEWORK_DEST"
+            ls -la "$FRAMEWORK_DEST"
           else
-            echo "ComposeApp.framework not found"
+            echo "ComposeApp.framework not found at $FRAMEWORK_SRC"
             exit 1
           fi
 
