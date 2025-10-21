@@ -157,32 +157,47 @@ jobs:
       # 9. Install Apple certificate and provisioning profiles
       - name: Install certs & provisioning profiles
         env:
-          BUILD_CERTIFICATE_BASE64: ${{ github.event.inputs.ios_lane == 'qa' && secrets.IOS_DISTRIBUTION_CERTIFICATE_P12 || secrets.IOS_CERTIFICATE_P12 }}
-          P12_PASSWORD: ${{ github.event.inputs.ios_lane == 'qa' && secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD || secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_DISTRIBUTION_CERTIFICATE_P12: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_P12 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
           IOS_DEV_MOBILEPROVISION: ${{ secrets.IOS_MOBILEPROVISION }}
           IOS_ADHOC_MOBILEPROVISION: ${{ secrets.IOS_MOBILEPROVISION_ADHOC }}
           IOS_APPSTORE_MOBILEPROVISION: ${{ secrets.IOS_MOBILEPROVISION_APPSTORE }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           echo "--- Decoding secrets for lane: ${{ github.event.inputs.ios_lane || 'beta' }} ---"
+
           CERT_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Select certificate based on lane
+          if [ "${{ github.event.inputs.ios_lane }}" = "qa" ]; then
+            echo "Using DISTRIBUTION certificate for QA lane"
+            echo -n "$IOS_DISTRIBUTION_CERTIFICATE_P12" | base64 --decode -o $CERT_PATH
+            CERT_PASSWORD="$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD"
+          else
+            echo "Using DEVELOPMENT certificate"
+            echo -n "$IOS_CERTIFICATE_P12" | base64 --decode -o $CERT_PATH
+            CERT_PASSWORD="$IOS_CERTIFICATE_PASSWORD"
+          fi
+
+          # Decode provisioning profiles
           PP_DEV_PATH=$RUNNER_TEMP/dev.mobileprovision
           PP_ADHOC_PATH=$RUNNER_TEMP/adhoc.mobileprovision
           PP_APPSTORE_PATH=$RUNNER_TEMP/appstore.mobileprovision
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERT_PATH
           echo -n "$IOS_DEV_MOBILEPROVISION" | base64 --decode -o $PP_DEV_PATH
           echo -n "$IOS_ADHOC_MOBILEPROVISION" | base64 --decode -o $PP_ADHOC_PATH
           echo -n "$IOS_APPSTORE_MOBILEPROVISION" | base64 --decode -o $PP_APPSTORE_PATH
 
-          echo "--- Creating temp keychain ---"
+          echo "--- Creating temporary keychain ---"
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           echo "--- Importing certificate ---"
-          security import $CERT_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security import $CERT_PATH -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
 
@@ -194,6 +209,10 @@ jobs:
 
           echo "--- Installed provisioning profiles ---"
           ls -la ~/Library/MobileDevice/Provisioning\ Profiles
+
+          echo "--- Verifying imported identities ---"
+          security find-identity -v -p codesigning || echo "No signing identities found!"
+
 
       # 9.1. Echo iOS build info
       - name: Log iOS Build Context
