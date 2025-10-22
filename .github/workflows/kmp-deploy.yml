@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       ios_lane:
-        description: "Fastlane lane for iOS (beta or release)"
+        description: "Fastlane lane for iOS (beta or release or qa)"
         required: true
         default: "beta"
       android_lane:
