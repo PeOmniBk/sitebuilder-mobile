@@ -172,8 +172,8 @@ jobs:
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
           # Select certificate based on lane
-          if [ "${{ github.event.inputs.ios_lane }}" = "qa" ]; then
-            echo "Using DISTRIBUTION certificate for QA lane"
+          if [ "${{ github.event.inputs.ios_lane }}" = "qa" ] || [ "${{ github.event.inputs.ios_lane }}" = "release" ]; then
+            echo "Using DISTRIBUTION certificate for QA/Release lane"
             echo -n "$IOS_DISTRIBUTION_CERTIFICATE_P12" | base64 --decode -o $CERT_PATH
             CERT_PASSWORD="$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD"
           else
