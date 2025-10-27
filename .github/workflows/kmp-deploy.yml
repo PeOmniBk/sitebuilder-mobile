@@ -64,46 +64,20 @@ jobs:
           mv site-builder-execution/.git SiteBuilderMobile/.git
 
       # 2. Auto bump version (M.m.E.s)
-      - name: Auto bump version
-        working-directory: SiteBuilderMobile
+      - name: Set version
         run: |
-          VERSION_FILE="version.txt"
+          MAJOR=0
+          MINOR=1
+          PATCH=${{ github.run_number }}
+          SUFFIX=0
 
-          if [ ! -f "$VERSION_FILE" ]; then
-            echo "0.1.0.0" > "$VERSION_FILE"
-          fi
+          APP_VERSION="${MAJOR}.${MINOR}.${PATCH}.${SUFFIX}"
+          BUILD_NUMBER=${{ github.run_number }}
 
-          APP_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
-          echo "Current version: $APP_VERSION"
-
-          IFS='.' read -r M m E s <<< "$APP_VERSION"
-
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            s=$((10#$s + 1))
-            if [ $s -gt 99 ]; then
-              s=0
-              E=$((10#$E + 1))
-            fi
-          fi
-
-          NEW_VERSION="${M}.${m}.${E}.${s}"
-          BUILD_NUMBER=$((10#$M * 1000000 + 10#$m * 10000 + 10#$E * 100 + 10#$s))
-
-          echo "New Version: $NEW_VERSION"
-          echo "Build Number: $BUILD_NUMBER"
-
-          echo "APP_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "$NEW_VERSION" > "$VERSION_FILE"
-            git config user.name "github-actions"
-            git config user.email "actions@github.com"
-            git add "$VERSION_FILE"
-            git commit -m "chore: bump version to $NEW_VERSION" || echo "No version change"
-            git push || echo "Push skipped (missing token)"
-          fi
-
+          echo "Generated dynamic version: $APP_VERSION (build $BUILD_NUMBER)"
 
 
       # 3. Decode Android keystore for signing
