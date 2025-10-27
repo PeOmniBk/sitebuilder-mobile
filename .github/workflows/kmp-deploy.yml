@@ -61,11 +61,13 @@ jobs:
         run: |
           git clone git@bitbucket.org:azentio-software/site-builder-execution.git
           mv site-builder-execution/SiteBuilderMobile SiteBuilderMobile
+          mv site-builder-execution/.git SiteBuilderMobile/.git
 
       # 2. Auto bump version (M.m.E.s)
       - name: Auto bump version
+        working-directory: SiteBuilderMobile
         run: |
-          VERSION_FILE="SiteBuilderMobile/version.txt"
+          VERSION_FILE="version.txt"
 
           if [ ! -f "$VERSION_FILE" ]; then
             echo "0.1.0.0" > "$VERSION_FILE"
