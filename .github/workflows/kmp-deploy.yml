@@ -71,8 +71,18 @@ jobs:
           PATCH=${{ github.run_number }}
           SUFFIX=0
 
+          LANE="${{ github.event.inputs.ios_lane || github.event.inputs.android_lane || 'beta' }}"
+
+          if [[ "$LANE" == "beta" ]]; then
+            SUFFIX=1
+          elif [[ "$LANE" == "qa" ]]; then
+            SUFFIX=2
+          elif [[ "$LANE" == "release" ]]; then
+            SUFFIX=3
+          fi
+
           APP_VERSION="${MAJOR}.${MINOR}.${PATCH}.${SUFFIX}"
-          BUILD_NUMBER=${{ github.run_number }}
+          BUILD_NUMBER=$((10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH * 100 + 10#$SUFFIX))
 
           echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
