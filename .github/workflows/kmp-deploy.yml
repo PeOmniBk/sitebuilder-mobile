@@ -66,28 +66,30 @@ jobs:
       # 2. Auto bump version (M.m.E.s)
       - name: Set version
         run: |
-          MAJOR=0
-          MINOR=1
+          # Base version values (defined by Azentio)
+          MAJOR=3
+          MINOR=4
+          EXTENSION=1
           PATCH=${{ github.run_number }}
-          SUFFIX=0
 
-          LANE="${{ github.event.inputs.ios_lane || github.event.inputs.android_lane || 'beta' }}"
+          # Store version (M×100 + m).E.P
+          STORE_MAJOR=$((10#$MAJOR * 100 + 10#$MINOR))
+          STORE_VERSION="${STORE_MAJOR}.${EXTENSION}.${PATCH}"
 
-          if [[ "$LANE" == "beta" ]]; then
-            SUFFIX=1
-          elif [[ "$LANE" == "qa" ]]; then
-            SUFFIX=2
-          elif [[ "$LANE" == "release" ]]; then
-            SUFFIX=3
-          fi
-
-          APP_VERSION="${MAJOR}.${MINOR}.${PATCH}.${SUFFIX}"
-          BUILD_NUMBER=$((10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH * 100 + 10#$SUFFIX))
+          APP_VERSION="${MAJOR}.${MINOR}.${EXTENSION}.${PATCH}"
+          BUILD_NUMBER="${STORE_MAJOR}${EXTENSION}${PATCH}"
 
           echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          echo "STORE_VERSION=$STORE_VERSION" >> $GITHUB_ENV
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
-          echo "Generated dynamic version: $APP_VERSION (build $BUILD_NUMBER)"
+          echo "==============================================="
+          echo "Generated versioning details"
+          echo "-----------------------------------------------"
+          echo "KMP Version : $APP_VERSION"
+          echo "Store Format: $STORE_VERSION"
+          echo "Build Number: $BUILD_NUMBER"
+          echo "==============================================="
 
 
       # 3. Decode Android keystore for signing
