@@ -26,13 +26,25 @@ jobs:
     timeout-minutes: 60
     steps:
 
-      # 0. Debug: Show available Xcode versions and switch to 16.x
-      - name: Show available Xcode versions
-        run: ls /Applications | grep Xcode
-
-      - name: Select Xcode 16.x
+      # 0. Debug: Pick Xcode version
+      - name: Select Latest Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode_16.2.app
+          echo "Listing available Xcode versions..."
+          ls /Applications | grep Xcode
+
+          # Find the latest Xcode app by version number
+          LATEST_XCODE=$(ls /Applications | grep -E '^Xcode_[0-9]' | sort -V | tail -n 1)
+          if [ -z "$LATEST_XCODE" ]; then
+            echo "No Xcode versions found under /Applications"
+            exit 1
+          fi
+
+          echo "Selecting $LATEST_XCODE as active Xcode"
+          sudo xcode-select -s "/Applications/$LATEST_XCODE/Contents/Developer"
+
+          echo "Active Xcode path:"
+          xcode-select -p
+          echo "Xcode version:"
           xcodebuild -version
 
       # 0.1. Print build context for traceability
