@@ -25,6 +25,8 @@ on:
         default: "beta"
   push:
     branches: [main]
+  permissions:
+    actions: write
 
 env:
   CI_PROVIDER: GITHUB
