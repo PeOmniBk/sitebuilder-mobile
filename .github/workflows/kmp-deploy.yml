@@ -38,26 +38,13 @@ jobs:
     timeout-minutes: 60
     steps:
 
-      # 0. Debug: Pick Xcode version
-      - name: Select Latest Xcode
+      # 0. Pick Xcode version
+      - name: Show available Xcode versions
+        run: ls /Applications | grep Xcode
+
+      - name: Select Xcode 16.x
         run: |
-          echo "Listing available Xcode versions..."
-          ls /Applications | grep Xcode
-
-          # Find the latest Xcode app by version number
-          LATEST_XCODE=$(ls /Applications | grep -E '^Xcode_[0-9]' | sort -V | tail -n 1)
-          if [ -z "$LATEST_XCODE" ]; then
-            echo "No Xcode versions found under /Applications"
-            exit 1
-          fi
-
-          echo "Selecting $LATEST_XCODE as active Xcode"
-          sudo xcode-select -s "/Applications/$LATEST_XCODE/Contents/Developer"
-
-          echo "Active Xcode path:"
-          xcode-select -p
-          echo "Xcode version:"
-          xcodebuild -version
+          sudo xcode-select -s /Applications/Xcode_16.2.app
 
       # 0.1. Print build context for traceability
       - name: Print Build Context
@@ -87,53 +74,73 @@ jobs:
           mv site-builder-execution/SiteBuilderMobile SiteBuilderMobile
           mv site-builder-execution/.git SiteBuilderMobile/.git
 
-      # 1.1. Cache version tracking files
-      - name: Restore version cache
-        id: version-cache
-        uses: actions/cache@v4
-        with:
-          path: .github/version_cache/
-          key: version-${{ github.ref_name }}
-
-      - name: Prepare version tracking files
+      # 1.1 Install GitHub CLI (macOS runners usually have it, but this is safe)
+      - name: Ensure gh CLI is available
         run: |
-          mkdir -p .github/version_cache
-          PATCH_FILE=".github/version_cache/patch_counter.txt"
-          PREV_VERSION_FILE=".github/version_cache/last_version.txt"
-          touch $PATCH_FILE $PREV_VERSION_FILE
+          if ! command -v gh >/dev/null 2>&1; then
+            brew update
+            brew install gh
+          fi
+          gh --version
 
-      # 2. Auto bump version (M.m.E.s)
-      - name: Set version
+      # 2. Set version using a repo variable as the patch counter (mutable)
+      - name: Set version (M.m.E.P with repo variable counter)
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+
           # ===============================================
-          # Version Configuration
+          # Version Configuration (inputs or env fallbacks)
           # ===============================================
           MAJOR=${{ inputs.major || env.MAJOR_VERSION || 1 }}
           MINOR=${{ inputs.minor || env.MINOR_VERSION || 0 }}
           EXTENSION=${{ inputs.extension || env.EXTENSION_VERSION || 1 }}
-          PATCH_FILE=".github/version_cache/patch_counter.txt"
-          PREV_VERSION_FILE=".github/version_cache/last_version.txt"
 
-          # ===============================================
-          # Patch Reset Logic
-          # ===============================================
-          CURRENT_BASE="${MAJOR}.${MINOR}"
+          # Variable name is unique per branch + M.m
+          BRANCH_SAFE="$(echo '${{ github.ref_name }}' | tr '/: ' '__')"
+          VAR_NAME="PATCH_${BRANCH_SAFE}_${MAJOR}_${MINOR}"
 
-          # Initialize tracking files if missing
-          mkdir -p .github
-          if [ ! -f "$PATCH_FILE" ]; then echo "0" > "$PATCH_FILE"; fi
-          if [ ! -f "$PREV_VERSION_FILE" ]; then echo "$CURRENT_BASE" > "$PREV_VERSION_FILE"; fi
+          echo "Using repository variable: $VAR_NAME"
 
-          LAST_BASE=$(cat "$PREV_VERSION_FILE")
+          # Try to read existing variable value
+          existing_value=""
+          set +e
+          existing_value=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
+            --jq '.value' 2>/dev/null)
+          rc=$?
+          set -e
 
-          if [ "$LAST_BASE" != "$CURRENT_BASE" ]; then
-            echo "Version base changed → resetting patch counter."
-            echo "0" > "$PATCH_FILE"
+          if [ $rc -ne 0 ] || [ -z "${existing_value}" ]; then
+            echo "No existing variable found → initializing counter to 0"
+            PATCH=0
+            # Create the variable with value 0 (will increment below)
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GH_REPO}/actions/variables" \
+              -f name="${VAR_NAME}" \
+              -f value="${PATCH}"
+          else
+            PATCH=$existing_value
+            echo "Loaded existing patch: $PATCH"
           fi
 
-          PATCH=$(( $(cat "$PATCH_FILE") + 1 ))
-          echo "$PATCH" > "$PATCH_FILE"
-          echo "$CURRENT_BASE" > "$PREV_VERSION_FILE"
+          # Increment patch
+          PATCH=$(( 10#$PATCH + 1 ))
+
+          # Persist the new value back to the repo variable
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
+            -f name="${VAR_NAME}" \
+            -f value="${PATCH}"
+
+          echo "New patch value: $PATCH"
 
           # ===============================================
           # Version Calculation
@@ -143,9 +150,9 @@ jobs:
           APP_VERSION="${MAJOR}.${MINOR}.${EXTENSION}.${PATCH}"
           BUILD_NUMBER="${STORE_MAJOR}${EXTENSION}${PATCH}"
 
-          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
-          echo "STORE_VERSION=$STORE_VERSION" >> $GITHUB_ENV
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          echo "APP_VERSION=$APP_VERSION"       >> $GITHUB_ENV
+          echo "STORE_VERSION=$STORE_VERSION"   >> $GITHUB_ENV
+          echo "BUILD_NUMBER=$BUILD_NUMBER"     >> $GITHUB_ENV
 
           echo "==============================================="
           echo "Generated Versioning Details"
@@ -153,22 +160,15 @@ jobs:
           echo "KMP Version : $APP_VERSION"
           echo "Store Format: $STORE_VERSION"
           echo "Build Number: $BUILD_NUMBER"
+          echo "Repo Var    : $VAR_NAME"
           echo "==============================================="
 
-      # 2.1 Save version to cache
-      - name: Save version cache
-        if: always()
-        uses: actions/cache@v4
-        with:
-          path: .github/version_cache/
-          key: version-${{ github.ref_name }}
 
       # 3. Decode Android keystore for signing
       - name: Decode Keystore
         run: |
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > testdeploy.keystore
           echo "Keystore decoded at root (testdeploy.keystore)"
-
 
       # 3.1. Set up Android + Fastlane environment
       - name: Set up JDK
