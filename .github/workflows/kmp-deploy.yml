@@ -3,6 +3,18 @@ name: KMP Deploy from Bitbucket
 on:
   workflow_dispatch:
     inputs:
+      major:
+        description: "Major version number"
+        required: false
+        default: "1"
+      minor:
+        description: "Minor version number"
+        required: false
+        default: "0"
+      extension:
+        description: "Extension (plant/client identifier)"
+        required: false
+        default: "1"
       ios_lane:
         description: "Fastlane lane for iOS (beta or release or qa)"
         required: true
@@ -75,19 +87,59 @@ jobs:
           mv site-builder-execution/SiteBuilderMobile SiteBuilderMobile
           mv site-builder-execution/.git SiteBuilderMobile/.git
 
+      # 1.1. Cache version tracking files
+      - name: Restore version cache
+        id: version-cache
+        uses: actions/cache@v4
+        with:
+          path: .github/version_cache/
+          key: version-${{ github.ref_name }}
+
+      - name: Prepare version tracking files
+        run: |
+          mkdir -p .github/version_cache
+          PATCH_FILE=".github/version_cache/patch_counter.txt"
+          PREV_VERSION_FILE=".github/version_cache/last_version.txt"
+          touch $PATCH_FILE $PREV_VERSION_FILE
+
       # 2. Auto bump version (M.m.E.s)
       - name: Set version
         run: |
-          # Base version values (defined by Azentio)
-          MAJOR=3
-          MINOR=4
-          EXTENSION=1
-          PATCH=${{ github.run_number }}
+          # ===============================================
+          # Version Configuration
+          # ===============================================
+          MAJOR=${{ inputs.major || env.MAJOR_VERSION || 1 }}
+          MINOR=${{ inputs.minor || env.MINOR_VERSION || 0 }}
+          EXTENSION=${{ inputs.extension || env.EXTENSION_VERSION || 1 }}
+          PATCH_FILE=".github/version_cache/patch_counter.txt"
+          PREV_VERSION_FILE=".github/version_cache/last_version.txt"
 
-          # Store version (M×100 + m).E.P
+          # ===============================================
+          # Patch Reset Logic
+          # ===============================================
+          CURRENT_BASE="${MAJOR}.${MINOR}"
+
+          # Initialize tracking files if missing
+          mkdir -p .github
+          if [ ! -f "$PATCH_FILE" ]; then echo "0" > "$PATCH_FILE"; fi
+          if [ ! -f "$PREV_VERSION_FILE" ]; then echo "$CURRENT_BASE" > "$PREV_VERSION_FILE"; fi
+
+          LAST_BASE=$(cat "$PREV_VERSION_FILE")
+
+          if [ "$LAST_BASE" != "$CURRENT_BASE" ]; then
+            echo "Version base changed → resetting patch counter."
+            echo "0" > "$PATCH_FILE"
+          fi
+
+          PATCH=$(( $(cat "$PATCH_FILE") + 1 ))
+          echo "$PATCH" > "$PATCH_FILE"
+          echo "$CURRENT_BASE" > "$PREV_VERSION_FILE"
+
+          # ===============================================
+          # Version Calculation
+          # ===============================================
           STORE_MAJOR=$((10#$MAJOR * 100 + 10#$MINOR))
           STORE_VERSION="${STORE_MAJOR}.${EXTENSION}.${PATCH}"
-
           APP_VERSION="${MAJOR}.${MINOR}.${EXTENSION}.${PATCH}"
           BUILD_NUMBER="${STORE_MAJOR}${EXTENSION}${PATCH}"
 
@@ -96,13 +148,20 @@ jobs:
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
           echo "==============================================="
-          echo "Generated versioning details"
+          echo "Generated Versioning Details"
           echo "-----------------------------------------------"
           echo "KMP Version : $APP_VERSION"
           echo "Store Format: $STORE_VERSION"
           echo "Build Number: $BUILD_NUMBER"
           echo "==============================================="
 
+      # 2.1 Save version to cache
+      - name: Save version cache
+        if: always()
+        uses: actions/cache@v4
+        with:
+          path: .github/version_cache/
+          key: version-${{ github.ref_name }}
 
       # 3. Decode Android keystore for signing
       - name: Decode Keystore
