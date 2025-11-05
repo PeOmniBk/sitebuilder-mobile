@@ -86,7 +86,7 @@ jobs:
           gh --version
 
       # 2. Set version using a repo variable as the patch counter (mutable)
-      - name: Set version (M.m.E.P with repo variable counter)
+      - name: Set version
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GH_PAT_VERSIONING }}
