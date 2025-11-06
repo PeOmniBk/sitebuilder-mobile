@@ -89,7 +89,7 @@ jobs:
           fi
           gh --version
 
-      # 2. Set version using a repo variable as the patch counter (supports manual override & regression protection)
+      # 2. Set version using a repo variable as the patch counter (supports manual override and regression protection)
       - name: Set version
         env:
           GH_REPO: ${{ github.repository }}
