@@ -117,26 +117,53 @@ jobs:
           echo "Inputs        : M=$MAJOR m=$MINOR e=$EXTENSION override=$PATCH_OVERRIDE"
           echo "==============================================="
 
+          # Helper: safe_get_var <name>
+          safe_get_var() {
+            local name="$1"
+            local raw
+            set +e
+            raw="$(gh api -H "Accept: application/vnd.github+json" "/repos/${GH_REPO}/actions/variables/${name}" --jq '.value' 2>/dev/null)"
+            local rc=$?
+            set -e
+            # On error, gh often prints {"message":"Not Found",...} to stdout; sanitize that.
+            if [ $rc -ne 0 ] || [ -z "${raw:-}" ] || [[ "$raw" == *"Not Found"* ]] || [[ "$raw" == \{* ]]; then
+              echo ""
+            else
+              echo "$raw"
+            fi
+          }
+
+          # Helper: create_or_update_var <name> <value>
+          create_or_update_var() {
+            local name="$1"
+            local value="$2"
+            if [ -n "$(safe_get_var "$name")" ]; then
+              gh api --method PATCH -H "Accept: application/vnd.github+json" \
+                "/repos/${GH_REPO}/actions/variables/${name}" \
+                -f name="${name}" -f value="${value}"
+            else
+              gh api --method POST -H "Accept: application/vnd.github+json" \
+                "/repos/${GH_REPO}/actions/variables" \
+                -f name="${name}" -f value="${value}"
+            fi
+          }
+
           # ===============================================
           # Regression Guard – Prevent older line rebuilds
           # ===============================================
           echo "Checking latest version line for regression protection..."
-          existing_line=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${GH_REPO}/actions/variables/${LATEST_VAR}" \
-            --jq '.value' 2>/dev/null || echo "")
+          existing_line="$(safe_get_var "$LATEST_VAR")"
 
           current_line="${MAJOR}.${MINOR}"
           latest_major=0
           latest_minor=0
 
           if [ -n "$existing_line" ]; then
-            latest_major=$(echo "$existing_line" | cut -d. -f1)
-            latest_minor=$(echo "$existing_line" | cut -d. -f2)
+            latest_major="$(echo "$existing_line" | cut -d. -f1)"
+            latest_minor="$(echo "$existing_line" | cut -d. -f2)"
             echo "Current version line: $current_line | Latest recorded: $existing_line"
 
-            if [ "$MAJOR" -lt "$latest_major" ] || \
-               { [ "$MAJOR" -eq "$latest_major" ] && [ "$MINOR" -lt "$latest_minor" ]; }; then
+            if [ "$MAJOR" -lt "$latest_major" ] || { [ "$MAJOR" -eq "$latest_major" ] && [ "$MINOR" -lt "$latest_minor" ]; }; then
               echo "Regression detected: You are trying to build an older line ($current_line) than the latest recorded ($existing_line)."
               echo "Please increment to at least $existing_line or higher."
               exit 1
@@ -146,24 +173,9 @@ jobs:
           fi
 
           # Update LATEST_VERSION_LINE if this is a newer line
-          if [ "$MAJOR" -gt "$latest_major" ] || \
-             { [ "$MAJOR" -eq "$latest_major" ] && [ "$MINOR" -gt "$latest_minor" ]; }; then
+          if [ "$MAJOR" -gt "$latest_major" ] || { [ "$MAJOR" -eq "$latest_major" ] && [ "$MINOR" -gt "$latest_minor" ]; }; then
             echo "Updating latest version line → $current_line"
-            if [ -n "$existing_line" ]; then
-              gh api \
-                --method PATCH \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${GH_REPO}/actions/variables/${LATEST_VAR}" \
-                -f name="${LATEST_VAR}" \
-                -f value="${current_line}"
-            else
-              gh api \
-                --method POST \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${GH_REPO}/actions/variables" \
-                -f name="${LATEST_VAR}" \
-                -f value="${current_line}"
-            fi
+            create_or_update_var "$LATEST_VAR" "$current_line"
           fi
 
           # ===============================================
@@ -175,53 +187,26 @@ jobs:
               exit 1
             fi
             echo "Manual patch override detected → using and persisting P=$PATCH_OVERRIDE"
-            PATCH=$PATCH_OVERRIDE
-
-            gh api \
-              --method PATCH \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
-              -f name="${VAR_NAME}" \
-              -f value="${PATCH}" \
-              || echo "Variable did not exist, creating new one..."
-
-            if ! gh api -H "Accept: application/vnd.github+json" "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" >/dev/null 2>&1; then
-              gh api \
-                --method POST \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${GH_REPO}/actions/variables" \
-                -f name="${VAR_NAME}" \
-                -f value="${PATCH}"
-            fi
+            PATCH="$PATCH_OVERRIDE"
+            create_or_update_var "$VAR_NAME" "$PATCH"
 
           else
             echo "No manual override → using repo variable counter"
-            existing_value=$(gh api -H "Accept: application/vnd.github+json" "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" --jq '.value' 2>/dev/null || true)
-             if [[ "$existing_value" == *"Not Found"* ]] || [ -z "$existing_value" ]; then
-              existing_value=""
-            fi
+            existing_value="$(safe_get_var "$VAR_NAME")"
 
             if [ -z "$existing_value" ]; then
               echo "No existing variable found → initializing counter to 0"
               PATCH=0
-              gh api \
-                --method POST \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${GH_REPO}/actions/variables" \
-                -f name="${VAR_NAME}" \
-                -f value="${PATCH}"
+              create_or_update_var "$VAR_NAME" "$PATCH"
+              # NOTE: By design, we DO NOT auto-increment on first creation,
+              # so the first build on a new line is *.0. Remove the next 'if' block
+              # if you prefer starting at *.1 instead.
             else
-              PATCH=$existing_value
+              PATCH="$existing_value"
               echo "Loaded existing patch: $PATCH"
+              PATCH=$((10#$PATCH + 1))
+              create_or_update_var "$VAR_NAME" "$PATCH"
             fi
-
-            PATCH=$((10#$PATCH + 1))
-            gh api \
-              --method PATCH \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
-              -f name="${VAR_NAME}" \
-              -f value="${PATCH}"
           fi
 
           # ===============================================
