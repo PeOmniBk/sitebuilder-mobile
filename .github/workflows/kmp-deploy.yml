@@ -100,10 +100,29 @@ jobs:
           # ===============================================
           # Version Configuration (inputs or env fallbacks)
           # ===============================================
-          MAJOR=${{ inputs.major || env.MAJOR_VERSION || 1 }}
-          MINOR=${{ inputs.minor || env.MINOR_VERSION || 0 }}
-          EXTENSION=${{ inputs.extension || env.EXTENSION_VERSION || 1 }}
+          MAJOR_INPUT="${{ github.event.inputs.major || '' }}"
+          MINOR_INPUT="${{ github.event.inputs.minor || '' }}"
+          EXTENSION=${{ github.event.inputs.extension || env.EXTENSION_VERSION || 1 }}
           PATCH_OVERRIDE=${{ github.event.inputs.patch_override || '' }}
+
+          # Try to derive latest version line if not manually provided
+          if [ -z "$MAJOR_INPUT" ] || [ -z "$MINOR_INPUT" ]; then
+            latest_line="$(gh api -H "Accept: application/vnd.github+json" \
+              "/repos/${GH_REPO}/actions/variables/LATEST_VERSION_LINE" --jq '.value' 2>/dev/null || true)"
+            if [ -n "$latest_line" ]; then
+              MAJOR=$(echo "$latest_line" | cut -d. -f1)
+              MINOR=$(echo "$latest_line" | cut -d. -f2)
+              echo "Auto-detected latest version line → $MAJOR.$MINOR"
+            else
+              MAJOR=1
+              MINOR=0
+              echo "No LATEST_VERSION_LINE found → defaulting to 1.0"
+            fi
+          else
+            MAJOR="$MAJOR_INPUT"
+            MINOR="$MINOR_INPUT"
+            echo "Manual version line detected → $MAJOR.$MINOR"
+          fi
 
           BRANCH_SAFE="$(echo '${{ github.ref_name }}' | tr '/: ' '__')"
           VAR_NAME="PATCH_${BRANCH_SAFE}_${MAJOR}_${MINOR}"
