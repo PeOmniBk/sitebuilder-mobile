@@ -196,10 +196,10 @@ jobs:
 
           else
             echo "No manual override → using repo variable counter"
-            existing_value=$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
-              --jq '.value' 2>/dev/null || echo "")
+            existing_value=$(gh api -H "Accept: application/vnd.github+json" "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" --jq '.value' 2>/dev/null || true)
+             if [[ "$existing_value" == *"Not Found"* ]] || [ -z "$existing_value" ]; then
+              existing_value=""
+            fi
 
             if [ -z "$existing_value" ]; then
               echo "No existing variable found → initializing counter to 0"
