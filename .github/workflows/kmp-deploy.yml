@@ -90,7 +90,7 @@ jobs:
           gh --version
 
       # 2. Set version using a repo variable as the patch counter (supports manual override)
-      - name: Set version (M.m.E.P with repo variable counter + override)
+      - name: Set version
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GH_PAT_VERSIONING }}
@@ -125,7 +125,7 @@ jobs:
               echo "patch_override must be numeric (got: $PATCH_OVERRIDE)"
               exit 1
             fi
-            echo "🔧 Manual patch override detected → using and persisting P=$PATCH_OVERRIDE"
+            echo "Manual patch override detected → using and persisting P=$PATCH_OVERRIDE"
             PATCH=$PATCH_OVERRIDE
 
             # Persist override to repo variable so future runs continue from here
