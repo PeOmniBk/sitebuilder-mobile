@@ -15,6 +15,10 @@ on:
         description: "Extension (plant/client identifier)"
         required: false
         default: "1"
+      patch_override:
+        description: "Optional manual patch override (forces and persists P to this value)"
+        required: false
+        default: ""
       ios_lane:
         description: "Fastlane lane for iOS (beta or release or qa)"
         required: true
@@ -85,8 +89,8 @@ jobs:
           fi
           gh --version
 
-      # 2. Set version using a repo variable as the patch counter (mutable)
-      - name: Set version
+      # 2. Set version using a repo variable as the patch counter (supports manual override)
+      - name: Set version (M.m.E.P with repo variable counter + override)
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GH_PAT_VERSIONING }}
@@ -99,50 +103,86 @@ jobs:
           MAJOR=${{ inputs.major || env.MAJOR_VERSION || 1 }}
           MINOR=${{ inputs.minor || env.MINOR_VERSION || 0 }}
           EXTENSION=${{ inputs.extension || env.EXTENSION_VERSION || 1 }}
+          PATCH_OVERRIDE=${{ github.event.inputs.patch_override }}
 
           # Variable name is unique per branch + M.m
           BRANCH_SAFE="$(echo '${{ github.ref_name }}' | tr '/: ' '__')"
           VAR_NAME="PATCH_${BRANCH_SAFE}_${MAJOR}_${MINOR}"
 
-          echo "Using repository variable: $VAR_NAME"
+          echo "==============================================="
+          echo "Versioning Step Started"
+          echo "-----------------------------------------------"
+          echo "Repo Variable : $VAR_NAME"
+          echo "Branch        : ${{ github.ref_name }}"
+          echo "Inputs        : M=$MAJOR m=$MINOR e=$EXTENSION override=$PATCH_OVERRIDE"
+          echo "==============================================="
 
-          # Try to read existing variable value
-          existing_value=""
-          set +e
-          existing_value=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
-            --jq '.value' 2>/dev/null)
-          rc=$?
-          set -e
+          # ===============================================
+          # Manual Patch Override (Persistent)
+          # ===============================================
+          if [ -n "$PATCH_OVERRIDE" ]; then
+            if ! [[ "$PATCH_OVERRIDE" =~ ^[0-9]+$ ]]; then
+              echo "patch_override must be numeric (got: $PATCH_OVERRIDE)"
+              exit 1
+            fi
+            echo "🔧 Manual patch override detected → using and persisting P=$PATCH_OVERRIDE"
+            PATCH=$PATCH_OVERRIDE
 
-          if [ $rc -ne 0 ] || [ -z "${existing_value}" ]; then
-            echo "No existing variable found → initializing counter to 0"
-            PATCH=0
-            # Create the variable with value 0 (will increment below)
+            # Persist override to repo variable so future runs continue from here
             gh api \
-              --method POST \
+              --method PATCH \
               -H "Accept: application/vnd.github+json" \
-              "/repos/${GH_REPO}/actions/variables" \
+              "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
+              -f name="${VAR_NAME}" \
+              -f value="${PATCH}" \
+              || echo "Could not persist override (may not exist yet, will create instead)"
+
+            # If variable doesn’t exist yet (first override ever)
+            if ! gh api -H "Accept: application/vnd.github+json" "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" >/dev/null 2>&1; then
+              gh api \
+                --method POST \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GH_REPO}/actions/variables" \
+                -f name="${VAR_NAME}" \
+                -f value="${PATCH}"
+            fi
+
+          else
+            echo "No manual override → using repo variable counter"
+
+            # Try to read existing variable value
+            existing_value=""
+            set +e
+            existing_value=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
+              --jq '.value' 2>/dev/null)
+            rc=$?
+            set -e
+
+            if [ $rc -ne 0 ] || [ -z "${existing_value}" ]; then
+              echo "No existing variable found → initializing counter to 0"
+              PATCH=0
+              gh api \
+                --method POST \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GH_REPO}/actions/variables" \
+                -f name="${VAR_NAME}" \
+                -f value="${PATCH}"
+            else
+              PATCH=$existing_value
+              echo "Loaded existing patch: $PATCH"
+            fi
+
+            # Increment patch
+            PATCH=$(( 10#$PATCH + 1 ))
+            gh api \
+              --method PATCH \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
               -f name="${VAR_NAME}" \
               -f value="${PATCH}"
-          else
-            PATCH=$existing_value
-            echo "Loaded existing patch: $PATCH"
           fi
-
-          # Increment patch
-          PATCH=$(( 10#$PATCH + 1 ))
-
-          # Persist the new value back to the repo variable
-          gh api \
-            --method PATCH \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
-            -f name="${VAR_NAME}" \
-            -f value="${PATCH}"
-
-          echo "New patch value: $PATCH"
 
           # ===============================================
           # Version Calculation
