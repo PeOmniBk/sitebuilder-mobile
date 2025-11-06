@@ -186,8 +186,25 @@ jobs:
               echo "patch_override must be numeric (got: $PATCH_OVERRIDE)"
               exit 1
             fi
-            echo "Manual patch override detected → using and persisting P=$PATCH_OVERRIDE"
+
+            echo "Manual patch override detected → requested P=$PATCH_OVERRIDE"
+
+            existing_patch="$(safe_get_var "$VAR_NAME")"
+
+            if [ -n "$existing_patch" ]; then
+              echo "Existing patch value is $existing_patch"
+
+              if [ "$PATCH_OVERRIDE" -le "$existing_patch" ]; then
+                echo "Regression detected: override ($PATCH_OVERRIDE) is ≤ existing patch ($existing_patch)."
+                echo "Manual patch override must be strictly greater than the current patch value."
+                exit 1
+              fi
+            else
+              echo "No existing patch found for this version line → creating new one"
+            fi
+
             PATCH="$PATCH_OVERRIDE"
+            echo "Persisting manual patch override → $PATCH"
             create_or_update_var "$VAR_NAME" "$PATCH"
 
           else
@@ -198,9 +215,7 @@ jobs:
               echo "No existing variable found → initializing counter to 0"
               PATCH=0
               create_or_update_var "$VAR_NAME" "$PATCH"
-              # NOTE: By design, we DO NOT auto-increment on first creation,
-              # so the first build on a new line is *.0. Remove the next 'if' block
-              # if you prefer starting at *.1 instead.
+              # NOTE: First build for a new version line will start at *.0
             else
               PATCH="$existing_value"
               echo "Loaded existing patch: $PATCH"
@@ -208,6 +223,7 @@ jobs:
               create_or_update_var "$VAR_NAME" "$PATCH"
             fi
           fi
+
 
           # ===============================================
           # Version Calculation
