@@ -89,7 +89,7 @@ jobs:
           fi
           gh --version
 
-      # 2. Set version using a repo variable as the patch counter (supports manual override)
+      # 2. Set version using a repo variable as the patch counter (supports manual override & regression protection)
       - name: Set version
         env:
           GH_REPO: ${{ github.repository }}
@@ -103,11 +103,11 @@ jobs:
           MAJOR=${{ inputs.major || env.MAJOR_VERSION || 1 }}
           MINOR=${{ inputs.minor || env.MINOR_VERSION || 0 }}
           EXTENSION=${{ inputs.extension || env.EXTENSION_VERSION || 1 }}
-          PATCH_OVERRIDE=${{ github.event.inputs.patch_override }}
+          PATCH_OVERRIDE=${{ github.event.inputs.patch_override || '' }}
 
-          # Variable name is unique per branch + M.m
           BRANCH_SAFE="$(echo '${{ github.ref_name }}' | tr '/: ' '__')"
           VAR_NAME="PATCH_${BRANCH_SAFE}_${MAJOR}_${MINOR}"
+          LATEST_VAR="LATEST_VERSION_LINE"
 
           echo "==============================================="
           echo "Versioning Step Started"
@@ -118,7 +118,56 @@ jobs:
           echo "==============================================="
 
           # ===============================================
-          # Manual Patch Override (Persistent)
+          # Regression Guard – Prevent older line rebuilds
+          # ===============================================
+          echo "Checking latest version line for regression protection..."
+          existing_line=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GH_REPO}/actions/variables/${LATEST_VAR}" \
+            --jq '.value' 2>/dev/null || echo "")
+
+          current_line="${MAJOR}.${MINOR}"
+          latest_major=0
+          latest_minor=0
+
+          if [ -n "$existing_line" ]; then
+            latest_major=$(echo "$existing_line" | cut -d. -f1)
+            latest_minor=$(echo "$existing_line" | cut -d. -f2)
+            echo "Current version line: $current_line | Latest recorded: $existing_line"
+
+            if [ "$MAJOR" -lt "$latest_major" ] || \
+               { [ "$MAJOR" -eq "$latest_major" ] && [ "$MINOR" -lt "$latest_minor" ]; }; then
+              echo "Regression detected: You are trying to build an older line ($current_line) than the latest recorded ($existing_line)."
+              echo "Please increment to at least $existing_line or higher."
+              exit 1
+            fi
+          else
+            echo "No existing latest version line found (first build)."
+          fi
+
+          # Update LATEST_VERSION_LINE if this is a newer line
+          if [ "$MAJOR" -gt "$latest_major" ] || \
+             { [ "$MAJOR" -eq "$latest_major" ] && [ "$MINOR" -gt "$latest_minor" ]; }; then
+            echo "Updating latest version line → $current_line"
+            if [ -n "$existing_line" ]; then
+              gh api \
+                --method PATCH \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GH_REPO}/actions/variables/${LATEST_VAR}" \
+                -f name="${LATEST_VAR}" \
+                -f value="${current_line}"
+            else
+              gh api \
+                --method POST \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GH_REPO}/actions/variables" \
+                -f name="${LATEST_VAR}" \
+                -f value="${current_line}"
+            fi
+          fi
+
+          # ===============================================
+          # Patch Resolution (auto-increment or override)
           # ===============================================
           if [ -n "$PATCH_OVERRIDE" ]; then
             if ! [[ "$PATCH_OVERRIDE" =~ ^[0-9]+$ ]]; then
@@ -128,16 +177,14 @@ jobs:
             echo "Manual patch override detected → using and persisting P=$PATCH_OVERRIDE"
             PATCH=$PATCH_OVERRIDE
 
-            # Persist override to repo variable so future runs continue from here
             gh api \
               --method PATCH \
               -H "Accept: application/vnd.github+json" \
               "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
               -f name="${VAR_NAME}" \
               -f value="${PATCH}" \
-              || echo "Could not persist override (may not exist yet, will create instead)"
+              || echo "Variable did not exist, creating new one..."
 
-            # If variable doesn’t exist yet (first override ever)
             if ! gh api -H "Accept: application/vnd.github+json" "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" >/dev/null 2>&1; then
               gh api \
                 --method POST \
@@ -149,18 +196,12 @@ jobs:
 
           else
             echo "No manual override → using repo variable counter"
-
-            # Try to read existing variable value
-            existing_value=""
-            set +e
             existing_value=$(gh api \
               -H "Accept: application/vnd.github+json" \
               "/repos/${GH_REPO}/actions/variables/${VAR_NAME}" \
-              --jq '.value' 2>/dev/null)
-            rc=$?
-            set -e
+              --jq '.value' 2>/dev/null || echo "")
 
-            if [ $rc -ne 0 ] || [ -z "${existing_value}" ]; then
+            if [ -z "$existing_value" ]; then
               echo "No existing variable found → initializing counter to 0"
               PATCH=0
               gh api \
@@ -174,8 +215,7 @@ jobs:
               echo "Loaded existing patch: $PATCH"
             fi
 
-            # Increment patch
-            PATCH=$(( 10#$PATCH + 1 ))
+            PATCH=$((10#$PATCH + 1))
             gh api \
               --method PATCH \
               -H "Accept: application/vnd.github+json" \
