@@ -6,15 +6,15 @@ on:
       major:
         description: "Major version number"
         required: false
-        default: "1"
+        default: ""
       minor:
         description: "Minor version number"
         required: false
-        default: "0"
+        default: ""
       extension:
         description: "Extension (plant/client identifier)"
         required: false
-        default: "1"
+        default: ""
       patch_override:
         description: "Optional manual patch override (forces and persists P to this value)"
         required: false
