@@ -50,7 +50,7 @@ jobs:
 
       - name: Select Xcode 16.x
         run: |
-          sudo xcode-select -s /Applications/Xcode_16.2.app
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
 
       # 0.1. Print build context for traceability
       - name: Print Build Context
@@ -102,7 +102,7 @@ jobs:
           # ===============================================
           MAJOR_INPUT="${{ github.event.inputs.major || '' }}"
           MINOR_INPUT="${{ github.event.inputs.minor || '' }}"
-          EXTENSION=${{ github.event.inputs.extension || env.EXTENSION_VERSION || 1 }}
+          EXTENSION=${{ github.event.inputs.extension || env.EXTENSION_VERSION || 0 }}
           PATCH_OVERRIDE=${{ github.event.inputs.patch_override || '' }}
 
           # Try to derive latest version line if not manually provided
@@ -231,8 +231,8 @@ jobs:
             existing_value="$(safe_get_var "$VAR_NAME")"
 
             if [ -z "$existing_value" ]; then
-              echo "No existing variable found → initializing counter to 0"
-              PATCH=0
+              echo "No existing variable found → initializing counter to 1"
+              PATCH=1
               create_or_update_var "$VAR_NAME" "$PATCH"
               # NOTE: First build for a new version line will start at *.0
             else
