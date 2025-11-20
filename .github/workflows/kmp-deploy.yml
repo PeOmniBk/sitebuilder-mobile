@@ -444,7 +444,9 @@ jobs:
           APP_VERSION: ${{ env.APP_VERSION }}
           BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-          FASTLANE_USER: ${{ secrets.APP_STORE_CONNECT_USERNAME }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
 
       # 12.0. Echo artifact summary before upload
       - name: Log Artifact Summary
