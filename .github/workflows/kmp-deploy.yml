@@ -6,7 +6,7 @@ on:
       bitbucket_branch:
         description: "Bitbucket branch to build from"
         required: false
-        default: "main"
+        default: "master"
       major:
         description: "Major version number"
         required: false
@@ -80,7 +80,7 @@ jobs:
 
       - name: Clone Bitbucket Repository
         run: |
-          BRANCH="${{ github.event.inputs.bitbucket_branch || 'main' }}"
+          BRANCH="${{ github.event.inputs.bitbucket_branch || 'master' }}"
           echo "Cloning Bitbucket branch: $BRANCH"
           git clone  --branch "$BRANCH" git@bitbucket.org:azentio-software/site-builder-execution.git
           mv site-builder-execution/SiteBuilderMobile SiteBuilderMobile
