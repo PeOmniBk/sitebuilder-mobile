@@ -76,7 +76,7 @@ jobs:
 
       - name: Clone Bitbucket Repository
         run: |
-          git clone git@bitbucket.org:azentio-software/site-builder-execution.git
+          git clone  --branch ios git@bitbucket.org:azentio-software/site-builder-execution.git
           mv site-builder-execution/SiteBuilderMobile SiteBuilderMobile
           mv site-builder-execution/.git SiteBuilderMobile/.git
 
