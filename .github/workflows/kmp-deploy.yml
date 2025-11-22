@@ -438,18 +438,35 @@ jobs:
           echo "=============================="
 
       # 10.2. API Key Debug
-      - name: Debug API key formatting
+      - name: Safe Debug ASC API Key env
         run: |
-          echo "=== FIRST LINE ==="
-          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" | head -n 2
-          echo "=== LAST LINE ==="
-          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" | tail -n 2
-          echo "=== LENGTH ==="
-          echo "${#APP_STORE_CONNECT_API_KEY_CONTENT}"
-        env:
-          APP_STORE_CONNECT_API_KEY_CONTENT: |
-            ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          echo "=== ASC API Key Debug (Safe) ==="
 
+          echo "KEY_ID length: ${#APP_STORE_CONNECT_API_KEY_ID}"
+          echo "ISSUER_ID length: ${#APP_STORE_CONNECT_API_KEY_ISSUER_ID}"
+
+          if [ -n "$APP_STORE_CONNECT_API_KEY_CONTENT" ]; then
+            echo "KEY_CONTENT detected: YES"
+            echo "KEY_CONTENT length: ${#APP_STORE_CONNECT_API_KEY_CONTENT}"
+
+            HEADER_LINE="$(echo "$APP_STORE_CONNECT_API_KEY_CONTENT" | head -n 1)"
+            FOOTER_LINE="$(echo "$APP_STORE_CONNECT_API_KEY_CONTENT" | tail -n 1)"
+
+            echo "KEY_CONTENT header (masked):"
+            echo "$HEADER_LINE" | sed 's/./*/g'
+
+            echo "KEY_CONTENT footer (masked):"
+            echo "$FOOTER_LINE" | sed 's/./*/g'
+          else
+            echo "KEY_CONTENT detected: NO"
+          fi
+
+          echo "System date: $(date)"
+          echo "Timezone: $(date +%Z)"
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
 
 
       # 11. Run iOS Fastlane Lane
@@ -466,8 +483,7 @@ jobs:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_CONTENT: |
-            ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
       # 12.0. Echo artifact summary before upload
       - name: Log Artifact Summary
         run: |
