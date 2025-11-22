@@ -437,6 +437,20 @@ jobs:
           security list-keychains
           echo "=============================="
 
+      # 10.2. API Key Debug
+      - name: Debug API key formatting
+        run: |
+          echo "=== FIRST LINE ==="
+          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" | head -n 2
+          echo "=== LAST LINE ==="
+          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" | tail -n 2
+          echo "=== LENGTH ==="
+          echo "${#APP_STORE_CONNECT_API_KEY_CONTENT}"
+        env:
+          APP_STORE_CONNECT_API_KEY_CONTENT: |
+            ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+
+
 
       # 11. Run iOS Fastlane Lane
       - name: Run iOS Fastlane Lane
