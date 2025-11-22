@@ -452,8 +452,8 @@ jobs:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-
+          APP_STORE_CONNECT_API_KEY_CONTENT: |
+            ${{ secrets.APP_STORE_CONNECT_API_KEY }}
       # 12.0. Echo artifact summary before upload
       - name: Log Artifact Summary
         run: |
