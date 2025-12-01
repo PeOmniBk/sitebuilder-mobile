@@ -44,7 +44,8 @@ env:
   CI_PROVIDER: GITHUB
   PROJECT_ROOT_DIR: "./SiteBuilderMobile"
   S3_BUCKET_NAME: imal-apk-bucket
-  GRADLE_OPTS: "-Xmx4g -Dorg.gradle.jvmargs='-Xmx4g -XX:MaxMetaspaceSize=1g'"
+  GRADLE_OPTS: "-Xmx6g -Dorg.gradle.jvmargs=-Xmx6g"
+  ORG_GRADLE_JVMARGS: "-Xmx6g -XX:MaxMetaspaceSize=1g"
 
 jobs:
   deploy:
@@ -302,7 +303,14 @@ jobs:
       - name: Build iOSArm64 Framework
         run: |
           cd SiteBuilderMobile
-          ./gradlew :composeApp:linkDebugFrameworkIosArm64 -x kspKotlinIosArm64 -b build.gradle.kts
+          export GRADLE_OPTS="-Xmx6g"
+          export ORG_GRADLE_JVMARGS="-Xmx6g -XX:MaxMetaspaceSize=1g"
+
+          ./gradlew :composeApp:linkDebugFrameworkIosArm64 \
+          -x kspKotlinIosArm64 \
+          -b build.gradle.kts \
+          --no-daemon \
+          --stacktrace
 
       # 8. Copy the framework
       - name: Copy ComposeApp.framework
@@ -432,6 +440,9 @@ jobs:
       # 11. Run iOS Fastlane Lane
       - name: Run iOS Fastlane Lane
         run: |
+          export GRADLE_OPTS="-Xmx6g"
+          export ORG_GRADLE_JVMARGS="-Xmx6g -XX:MaxMetaspaceSize=1g"
+
           cd SiteBuilderMobile/iosApp
           fastlane ios ${{ github.event.inputs.ios_lane || 'beta' }}
           echo "IPA files after Fastlane run:"
