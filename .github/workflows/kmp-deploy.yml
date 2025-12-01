@@ -1,5 +1,9 @@
 name: KMP Deploy from Bitbucket
 
+concurrency:
+  group: sitebuilder-versioning-lock
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
