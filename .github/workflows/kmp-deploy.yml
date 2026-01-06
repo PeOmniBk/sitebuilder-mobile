@@ -307,7 +307,6 @@ jobs:
           export ORG_GRADLE_JVMARGS="-Xmx6g -XX:MaxMetaspaceSize=1g"
 
           ./gradlew :composeApp:linkDebugFrameworkIosArm64 \
-          -x kspKotlinIosArm64 \
           -b build.gradle.kts \
           --no-daemon \
           --stacktrace
